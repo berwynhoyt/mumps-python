@@ -1,0 +1,4 @@
+*.o
+*.so
+mpy.c
+__pycache__
