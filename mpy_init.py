@@ -8,6 +8,7 @@ __version__ = '{}.{}.{}'.format(*__version_info__)
 
 from mpy import ffi, lib
 import sys
+import traceback
 
 mpy_locals = {}
 encoding = 'utf-8'
@@ -39,6 +40,7 @@ def returner(retval, output=None):
         retval = b''
     if output is None:
         sys.stdout.write(f"{retval!r}")
+        sys.stdout.flush()
         return 0
     maxlen = output.length
     if not isinstance(retval, (bytes, bytearray)):
@@ -47,7 +49,25 @@ def returner(retval, output=None):
     output.length = len(retval)
     return 0
 
-@ffi.def_extern()
+def print_error(text):
+    sys.stderr.write(text)
+    sys.stderr.flush()
+
+def error_handler(exc, exc_value, tb):
+    if tb is None:  # happens if there was an error converting the return value after the call
+        print_error(repr(exc_value))
+        return
+    # fetch arguments
+    func_locals = tb.tb_frame.f_locals
+    output = func_locals.get('output', None)
+    argc = func_locals.get('argc')
+    if argc < 2 or output is None:
+        traceback.print_exception(exc, exc_value, tb)
+        return
+    returner(repr(exc_value), output)
+
+_code_type = type(compile('','','exec'))
+@ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_eval(argc, code, output):
     """ Run Python code in globals() scope and with locals=mpy_locals.
         `code` is cdata pointer to a gtm_string_t* (i.e. pointer to bytes).
@@ -55,7 +75,7 @@ def mpy_eval(argc, code, output):
             This way you can run code that you have previously precompiled into a local variable
         `output` (optional) is a cdata pointer to a gtm_string_t* that receives the output of the function.
         return 0 on success and return a string representation of the return value in .output (if supplied) or on stdout
-        return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
+        return <0 on error and return the repr(exception) in .output, if supplied, otherwise display the whole traceback on stderr
         Example of calling from M:
             do &mpy.eval("3+4-1",.result)
     """
@@ -64,11 +84,11 @@ def mpy_eval(argc, code, output):
     # Note: do not overwrite input variables code and output because they 'own' the strings (in cffi terms), keeping them alive
     _code = gtm2bytes(code)
     retval = eval(_code, globals(), mpy_locals)
-    if type(retval) == 'code':
-        retval = eval(_code, globals(), mpy_locals)
+    if type(retval) == _code_type:
+        retval = eval(retval, globals(), mpy_locals)
     return returner(retval, output=output)
 
-@ffi.def_extern()
+@ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_exec(argc, code, output):
     """ Run Python code in globals() scope and with locals=mpy_locals.
         `code` is cdata pointer to a gtm_string_t* (i.e. pointer to bytes).
@@ -84,10 +104,11 @@ def mpy_exec(argc, code, output):
     # Note: do not overwrite input variables code and output because they 'own' the strings (in cffi terms), keeping them alive
     _code = gtm2bytes(code)
     exec(_code, globals(), mpy_locals)
-    output.length = 0
+    if output is not None:
+        output.length = 0
     return 0
 
-@ffi.def_extern()
+@ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_vfunc(argc, funcname, output, args):
     """ Run Python function funcname in globals() scope and with locals=mpy_locals.
         `funcname` is a bytearray (actualy, a cdata pointer to a gtm_string_t pointer) which specifies
@@ -111,7 +132,7 @@ def mpy_vfunc(argc, funcname, output, args):
     mpy_locals['__args__'] = None
     return returner(retval, output=output)
 
-@ffi.def_extern()
+@ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_vfunc_raw(argc, funcname, output, args):
     """ Same as mpy_vfunc() except does not try to convert args to numbers
         Example of calling from M:

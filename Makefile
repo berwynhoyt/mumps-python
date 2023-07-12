@@ -24,7 +24,7 @@ CC = gcc
 # Core build targets
 all: build
 build: mpy.so
-mpy.so:
+mpy.so: mpy_init.py build.py
 	python3 build.py
 
 
@@ -42,7 +42,8 @@ allvars:
 # ~~~ Clean
 
 clean:
-	rm -f *.o *.so
+	rm -f *.o *.so mpy.c
+	rm -rf __pycache__
 
 
 # ~~~ Test
