@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+""" Builder for mumps-python """
 
 import cffi
 ffi = cffi.FFI()
@@ -9,7 +10,7 @@ YDB_INCLUDES = subprocess.run(['pkg-config', '--cflags', 'yottadb'], capture_out
 # This is a pseudo #include file in a format that embedding_api() requires since it can't handle #include
 mpy_typedefs = """
     typedef ... va_list;
-    typedef ... gtm_string_t;
+    typedef struct { unsigned long length; char *address; } gtm_string_t;
     typedef long... gtm_long_t;
     typedef int... gtm_int_t;
     """
@@ -18,31 +19,60 @@ mpy_typedefs = """
 mpy_h = """
     gtm_int_t mpy_version_number(int _argc);
     // implemented varargs per: https://foss.heptapod.net/pypy/cffi/-/blob/branch/default/demo/extern_python_varargs.py
-    gtm_int_t mpy_vpython(int argc, const gtm_string_t *code, gtm_string_t *outstr, va_list *args);
-    gtm_long_t mpy_open(int argc, gtm_string_t *outstr, gtm_int_t flags);
-    gtm_int_t mpy_close(int argc, long lua_handle);
+    gtm_int_t mpy_vfunc(int argc, const gtm_string_t *code, gtm_string_t *outstr, va_list *args);
+    gtm_int_t mpy_vfunc_raw(int argc, const gtm_string_t *code, gtm_string_t *outstr, va_list *args);
+    gtm_int_t mpy_eval(int argc, const gtm_string_t *code, gtm_string_t *outstr);
+    gtm_int_t mpy_exec(int argc, const gtm_string_t *code, gtm_string_t *outstr);
     """
 
 # These are C functions that this library makes available for Python to call
-mpy_c_declarations = """
+mpy_c_declarations = r"""
     #include <stdarg.h>
     #include <gtmxc_types.h>
-
-    static gtm_int_t mpy_vpython(int argc, const gtm_string_t *code, gtm_string_t *outstr, va_list *args);
-
-    static gtm_int_t mpy_python(int argc, const gtm_string_t *code, gtm_string_t *outstr, ...) {
+""" + mpy_h + r"""
+    gtm_int_t mpy_func(int argc, const gtm_string_t *code, gtm_string_t *outstr, ...) {
         va_list ap;
         va_start(ap, outstr);
-        gtm_int_t result = mpy_vpython(argc, code, outstr, &ap);
+        gtm_int_t result = mpy_vfunc(argc, code, outstr, &ap);
+        va_end(ap);
+        return result;
+    }
+    gtm_int_t mpy_func_raw(int argc, const gtm_string_t *code, gtm_string_t *outstr, ...) {
+        va_list ap;
+        va_start(ap, outstr);
+        gtm_int_t result = mpy_vfunc_raw(argc, code, outstr, &ap);
         va_end(ap);
         return result;
     }
 
-    static gtm_string_t* next_string(va_list *va) { return va_arg((*va), gtm_string_t*); }
+    static gtm_string_t* next_string(va_list *va) {  return va_arg((*va), gtm_string_t*);  }
 
+    #define GTM_STRING(str) {sizeof(str)-1, str}  /* Initializer gtm_string_t */
     static gtm_int_t test(void) {
-        gtm_string_t tmp={3, "tmp"}, code={8, "print(1)"}, arg1={4, "arg1"}, arg2={4, "arg2"};
-        return mpy_python(3, &code, &tmp, &arg1, &arg2);
+        char tmp[100] = "<unchanged>";
+        gtm_int_t result;
+
+        {
+            gtm_string_t output={11, tmp}, code=GTM_STRING("4+5");
+            result = mpy_eval(2, &code, &output);
+            printf("eval=%d: output='%.*s' (should be '9')\n", result, (int)output.length, output.address);
+        }
+        {
+            gtm_string_t output={11, tmp}, code=GTM_STRING("def f(a,b):\n return a+b");
+            result = mpy_exec(2, &code, &output);
+            printf("exec=%d: output='%.*s' (should be '')\n", result, (int)output.length, output.address);
+        }
+        {
+            gtm_string_t output={11, tmp}, code=GTM_STRING("f"), arg1=GTM_STRING("3"), arg2=GTM_STRING("4");
+            result = mpy_func(4, &code, &output, &arg1, &arg2);
+            printf("func=%d: output='%.*s' (should be '7')\n", result, (int)output.length, output.address);
+        }
+        {
+            gtm_string_t output={11, tmp}, code=GTM_STRING("f"), arg1=GTM_STRING("3"), arg2=GTM_STRING("4");
+            result = mpy_func_raw(4, &code, &output, &arg1, &arg2);
+            printf("func=%d: output='%.*s' (should be '34')\n", result, (int)output.length, output.address);
+        }
+        return result;
     }
 """
 
