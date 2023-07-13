@@ -27,6 +27,9 @@ build: mpy.so
 mpy.so: mpy_init.py build.py
 	python3 build.py
 
+setup:
+	pip install -r requirements.txt
+
 
 # ~~~ Debug
 

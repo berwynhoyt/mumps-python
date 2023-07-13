@@ -66,16 +66,62 @@ def error_handler(exc, exc_value, tb):
         return
     returner(repr(exc_value), output)
 
+compilations = {}  # dict of compilations
+compilation_index = 0  # position of next index to compile into
+
+@ffi.def_extern(error=-1, onerror=error_handler)
+def mpy_compile(argc, code, name, mode, output, flags):
+    """ Compile Python code and return a handle to it for running it later with `eval()` or `exec()`
+        This simply calls Python's built-in `compile` function with `dont_inherit=True`.
+        Note: dont_inherit=True makes the compilation independent of the calling code's __future__ module settings,
+        which is desirable, but potentially makes the result slightly different than straight calls of `eval()` or `exec()`.
+        (see documentation on dont_inherit in Python docs: https://docs.python.org/3/library/functions.html?highlight=compile#compile
+        `code` is an M string of Python code to compile
+        `name` is an M string containing a name used to describe the code in error messages: e.g. '<string>' or a filename
+        `mode` is an M string that must be `eval`, `exec` or `single` per Python's documentation on `compile()`
+        `output` (optional) is an M 'actualname' that receives the result of the function.
+        `flags` (optional) is an M string_number that represents flags to pass to Python's `compile()` (default 0)
+        Return 0 on success with output containing a handle in the format ">integer". This may be later passed to `eval()` or `exec()`.
+        Return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
+        Example of calling from M:
+            do &mpy.compile("print(1)",.handle)
+            do &mpy.eval(handle)
+    """
+    global compilations, compilation_index
+    if argc < 4:
+        output = None
+    # Note: do not overwrite input variables code and output because they 'own' the strings (in cffi terms), keeping them alive
+    _code = gtm2bytes(code)
+    _name = gtm2bytes(name).decode(encoding)
+    _mode = gtm2bytes(mode).decode(encoding)
+    _flags = 0 if argc < 5 else int(gtm2bytes(flags))
+    compilation = compile(_code, _name, _mode, flags=_flags, dont_inherit=True)
+    handle = b'>' + str(compilation_index).encode(encoding)
+    compilation_index += 1
+    compilations[handle] = compilation
+    if output is not None:
+        output.length = len(handle)
+        output.address = ffi.from_buffer(handle)
+    return 0
+
+@ffi.def_extern(error=-1, onerror=error_handler)
+def mpy_uncompile(argc, handle):
+    """ Uncompile Python code (i.e. free a previously compiled piece of code)
+        `handle` is an M string previously returned by `mpy_compile()`
+        Return 0. No error or exception can occur.
+    """
+    global compilations
+    compilations.pop(gtm2bytes(handle), None)
+    return 0
+
 _code_type = type(compile('','','exec'))
 @ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_eval(argc, code, output):
-    """ Run Python code in globals() scope and with locals=mpy_locals.
-        `code` is cdata pointer to a gtm_string_t* (i.e. pointer to bytes).
-            If `code`, when evaluated, returns a python code object, that code object is eval()ed instead.
-            This way you can run code that you have previously precompiled into a local variable
-        `output` (optional) is a cdata pointer to a gtm_string_t* that receives the output of the function.
-        return 0 on success and return a string representation of the return value in .output (if supplied) or on stdout
-        return <0 on error and return the repr(exception) in .output, if supplied, otherwise display the whole traceback on stderr
+    """ Evaluate and return a Python expression in globals() scope and with locals=mpy_locals.
+        `code` is an M string of Python code or a handle of pre_compiled code, returned by `mpy_compile()`
+        `output` (optional) is an M 'actualname' that receives the result of the function.
+        Return 0 on success and return a string representation of the return value in .output (if supplied) or on stdout
+        Return <0 on error and return the repr(exception) in .output, if supplied; otherwise display the whole traceback on stderr
         Example of calling from M:
             do &mpy.eval("3+4-1",.result)
     """
@@ -83,19 +129,18 @@ def mpy_eval(argc, code, output):
         output = None
     # Note: do not overwrite input variables code and output because they 'own' the strings (in cffi terms), keeping them alive
     _code = gtm2bytes(code)
+    if _code.startswith(b'>'):
+        _code = compilations[_code]
     retval = eval(_code, globals(), mpy_locals)
-    if type(retval) == _code_type:
-        retval = eval(retval, globals(), mpy_locals)
     return returner(retval, output=output)
 
 @ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_exec(argc, code, output):
-    """ Run Python code in globals() scope and with locals=mpy_locals.
-        `code` is cdata pointer to a gtm_string_t* (i.e. pointer to bytes).
-            if you wish to run a precompiled python code object, see mpy_eval()
-        `output` (optional) is a cdata pointer to a gtm_string_t* that receives the output of the function.
-        return 0 on success
-        return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
+    """ Execute Python code in globals() scope and with locals=mpy_locals.
+        `code` is an M string of Python code or a handle of pre_compiled code, returned by `mpy_compile()`
+        `output` (optional) is an M 'actualname' that receives the result of the function.
+        Return 0 on success and empty output
+        Return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
         Example of calling from M:
             do &mpy.exec("print(1)")
     """
@@ -103,6 +148,8 @@ def mpy_exec(argc, code, output):
         output = None
     # Note: do not overwrite input variables code and output because they 'own' the strings (in cffi terms), keeping them alive
     _code = gtm2bytes(code)
+    if _code.startswith(b'>'):
+        _code = compilations[_code]
     exec(_code, globals(), mpy_locals)
     if output is not None:
         output.length = 0
@@ -111,12 +158,12 @@ def mpy_exec(argc, code, output):
 @ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_vfunc(argc, funcname, output, args):
     """ Run Python function funcname in globals() scope and with locals=mpy_locals.
-        `funcname` is a bytearray (actualy, a cdata pointer to a gtm_string_t pointer) which specifies
-          a name within scope that references a function run. Allows dot notation like, "math.abs"
-        `output` (optional) is a cdata pointer to a gtm_string_t* that receives the output of the function.
+        `funcname` is an M string which specifies a name within scope that references a function run.
+            It allows dot notation like, "math.abs".
+        `output` (optional) is an M 'actualname' that receives the result of the function.
         `args` (optional) is a va_args pointer to a list of gtm_string_t strings which specify arguments to pass.
-        return 0 on success and return a string representation of the return value in .output (if supplied) or on stdout
-        return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
+        Return 0 on success and return a string representation of the return value in .output (if supplied) or on stdout
+        Return <0 on error and return the exception message in .output, if supplied, otherwise display the whole traceback on stderr
         Example of calling from M:
             do &mpy.exec("def f(a,b): return a+b")
             do &mpy.func("f",.result,3,4)
@@ -134,10 +181,10 @@ def mpy_vfunc(argc, funcname, output, args):
 
 @ffi.def_extern(error=-1, onerror=error_handler)
 def mpy_vfunc_raw(argc, funcname, output, args):
-    """ Same as mpy_vfunc() except does not try to convert args to numbers
+    """ Same as mpy_vfunc() except it does not try to convert args to numbers
         Example of calling from M:
             do &mpy.exec("def f(a,b): return a+b")
-            do &mpy.func("f",.result,3,4)
+            do &mpy.funcRaw("f",.result,3,4)
             write result,!  ; shows: 34
     """
     if argc < 2:

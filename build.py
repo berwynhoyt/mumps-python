@@ -23,6 +23,8 @@ mpy_h = """
     gtm_int_t mpy_vfunc_raw(int argc, const gtm_string_t *code, gtm_string_t *outstr, va_list *args);
     gtm_int_t mpy_eval(int argc, const gtm_string_t *code, gtm_string_t *outstr);
     gtm_int_t mpy_exec(int argc, const gtm_string_t *code, gtm_string_t *outstr);
+    gtm_int_t mpy_compile(int argc, const gtm_string_t *code, const gtm_string_t *name, const gtm_string_t *mode, gtm_string_t *output, const gtm_string_t *flags);
+    gtm_int_t mpy_uncompile(int argc, const gtm_string_t *handle);
     """
 
 # These are C functions that this library makes available for Python to call
@@ -71,6 +73,19 @@ mpy_c_declarations = r"""
             gtm_string_t output={11, tmp}, code=GTM_STRING("f"), arg1=GTM_STRING("3"), arg2=GTM_STRING("4");
             result = mpy_func_raw(4, &code, &output, &arg1, &arg2);
             printf("func=%d: output='%.*s' (should be '34')\n", result, (int)output.length, output.address);
+        }
+        {
+            gtm_string_t output={11, tmp}, code=GTM_STRING("2**8"), name=GTM_STRING("<string>"), mode=GTM_STRING("eval"), flags=GTM_STRING("0");
+            result = mpy_compile(5, &code, &name, &mode, &output, &flags);
+            printf("compile=%d: output='%.*s' (should be '>0')\n", result, (int)output.length, output.address);
+        }
+        {
+            gtm_string_t output={11, tmp}, handle=GTM_STRING(">0");
+            result = mpy_eval(2, &handle, &output);
+            printf("eval=%d: output='%.*s' (should be '256')\n", result, (int)output.length, output.address);
+            result = mpy_uncompile(2, &handle);
+            printf("uncompile[output]=%d (should be 0)\n", result);
+            result = mpy_uncompile(2, &handle);
         }
         return result;
     }
