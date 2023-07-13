@@ -1,8 +1,8 @@
-# Mumps-python for the MUMPS database
+# Python for MUMPS databases
 
 ## Overview
 
-Mumps-python is a python language plugin for the MUMPS database. It provides the means to call Lua from within M. Mumps-python complements [YDBPython](https://gitlab.com/YottaDB/Lang/YDBPython) (cf. YDB's [Multi-Language Programmer's Guide](https://docs.yottadb.com/MultiLangProgGuide/pythonprogram.html)) which operates in the other direction, letting Python code access an M database.
+Mumps-python is a Python language plugin for MUMPS databases. It provides the means to call Python from within M. Mumps-python complements [YDBPython](https://gitlab.com/YottaDB/Lang/YDBPython) (cf. YDB's [Multi-Language Programmer's Guide](https://docs.yottadb.com/MultiLangProgGuide/pythonprogram.html)) which operates in the other direction, letting Python code access an M database.
 
 Invoking a Python command from M is easy. Here are a few examples:
 
@@ -39,7 +39,7 @@ YDB>do &mpy.funcRaw("type",.out,3)  write out
 <class 'bytes'>
 ```
 
-For the sake of speed, it is also possible to pre-compile python code:
+For the sake of speed, it is also possible to pre-compile Python code:
 
 ```lua
 YDB>do &mpy.compile("sum(range(1000000))","acumulator","eval",.handle)
@@ -72,7 +72,7 @@ Here is the list of supplied functions, [optional parameters in square brackets]
 - **mpy.compile**(code,name,mode\[,output\[,flags=0]])
 - **mpy.version**()
 
-**`mpy.eval()`** evaluates `code` as a python expression using Python's built-in function `eval()`. Alternatively, `code` may be the handle of a precompiled chunk of code previously returned by `mpy.compile()`. The optional parameter `output` is an M 'actualname' that receives the result of the function. Return 0 on success and return a string representation of the return value in `.output`, if supplied; otherwise on `stdout`. Return <0 on error and return the `repr(exception)` in `.output`, if supplied; otherwise display the whole traceback on `stderr`.
+**`mpy.eval()`** evaluates `code` as a Python expression using Python's built-in function `eval()`. Alternatively, `code` may be the handle of a precompiled chunk of code previously returned by `mpy.compile()`. The optional parameter `output` is an M 'actualname' that receives the result of the function. Return 0 on success and return a string representation of the return value in `.output`, if supplied; otherwise on `stdout`. Return <0 on error and return the `repr(exception)` in `.output`, if supplied; otherwise display the whole traceback on `stderr`.
 
 **`mpy.exec()`** executes Python `code` Python's built-in function `exec()`. Alternatively, `code` may be the handle of a precompiled chunk of code previously returned by `mpy.compile()`. The optional parameter `output` is an M 'actualname' that receives the result of the function. Return 0 on success (with empty `.output`). Return <0 on error with `repr(exception)` in `.output`, if supplied; otherwise display the whole traceback on `stderr`.
 
