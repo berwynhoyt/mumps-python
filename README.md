@@ -116,12 +116,49 @@ make  # run ./build.py
 sudo make install       # install mpy.so into the system
 ```
 
+### Pypy
+
+If you prefer PyPy instead of the default CPython, first install PyPy, which is somewhat complicated:
+
+```shell
+# substitute appropriate pypy version number in URL and paths
+wget https://downloads.python.org/pypy/pypy3.10-v7.3.12-linux64.tar.bz2
+sudo tar -xf pypy3.*.bz2 -C/usr/local/lib
+sudo mv /usr/local/lib/pypy3.10* /usr/local/lib/pypy3.10
+sudo ln -s /usr/local/lib/pypy3.10/bin/pypy /usr/local/bin/pypy3
+sudo ln -s /usr/local/lib/pypy3.10/bin/libpypy3.10-c.so /usr/local/lib/libpypy3-c.so
+# help ldd load other necessary pypy library paths
+sudo ln -s /usr/local/lib/pypy3.10/lib/libffi.so.6 /usr/local/lib/libffi.so.6
+sudo ln -s /usr/local/lib/pypy3.10/lib/libtinfow.so.6 /usr/local/lib/libtinfow.so.6
+hash -r
+
+echo /usr/local/lib/pypy3.10/lib | sudo tee /etc/ld.so.conf.d/pypy3.conf
+sudo ldconfig
+# The above 2 lines are for Ubuntu-like systems. On systems where it doesn't work, you might try:
+#  LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib/pypy3.10/lib"
+```
+
+Now you can rebuild your mpy.so using PyPy as follows:
+
+```shell
+make PYTHON=pypy3 clean build
+sudo make install
+```
+
+Test whether CPython or PyPy are being used:
+
+```shell
+$ ydb
+YDB>do &mpy.exec("import platform; print(platform.python_implementation())")
+PyPy   ;This shows 'CPython' when mpy is still built against PyPy
+```
+
 ## Testing
 
 To test mumps-python, simply type:
 
 ```shell
-make test  # not implemented yet
+make test  # not properly implemented yet
 ```
 
 To perform a set of speed tests, do:
@@ -136,11 +173,14 @@ make benchmark  # not implemented yet
 
 This needs work.
 
-### Quirks
-
-Need to add note on CPython vs Pypy.
-
 ## Troubleshooting
 
 TBD
 
+## To do
+
+ - Improve speed of mumps-python and check whether it needs a special version tailored for CPython to get calling speed in CPython
+ - Address signal safety
+ - Weigh up making it work with multiple python interpreters (like Lua does) -- will this be of value, in view of there being only one GIL?
+
+YDBPython could also benefit significantly from speed improvements similar to the ones implemented for lua-yottadb (cachearrays, etc)

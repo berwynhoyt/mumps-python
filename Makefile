@@ -5,6 +5,10 @@
 
 PREFIX=/usr/local
 
+# set to pypy3 to use pypy
+PYTHON=python3
+
+
 # Locate YDB install
 ydb_dist?=$(shell pkg-config --variable=prefix yottadb --silence-errors)
 ifeq ($(ydb_dist),)
@@ -13,19 +17,11 @@ endif
 YDB_INSTALL:=$(ydb_dist)/plugin
 
 
-# ~~~  Internal variables
-
-YDB_INCLUDES = $(shell pkg-config --cflags yottadb)
-PYTHON_INCLUDES = $(shell python3-config --includes)
-CFLAGS = -O3 -fPIC -std=c11 -Wall -Werror -Wno-unknown-pragmas  $(YDB_INCLUDES) $(PYTHON_INCLUDES)
-LDFLAGS = -lyottadb -L$(ydb_dist) -Wl,-rpath,$(ydb_dist)
-CC = gcc
-
 # Core build targets
 all: build
 build: mpy.so
 mpy.so: mpy_init.py build.py
-	python3 build.py
+	$(PYTHON) build.py
 
 setup:
 	pip install -r requirements.txt
