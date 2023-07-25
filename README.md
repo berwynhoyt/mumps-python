@@ -169,9 +169,9 @@ make benchmark  # not implemented yet
 
 ## Technical details
 
-### Thread Safety
+### Signal Safety
 
-This needs work.
+### Thread Safety
 
 ## Troubleshooting
 
@@ -179,8 +179,38 @@ TBD
 
 ## To do
 
- - Improve speed of mumps-python and check whether it needs a special version tailored for CPython to get calling speed in CPython
- - Address signal safety
- - Weigh up making it work with multiple python interpreters (like Lua does) -- will this be of value, in view of there being only one GIL?
+### Mumps-python
 
-YDBPython could also benefit significantly from speed improvements similar to the ones implemented for lua-yottadb (cachearrays, etc)
+- 2d: benchmarks matching some of the MLua ones
+
+- 4d: Improve calling speed of mumps-python (CPython-specific code?)
+
+- 10d: Robustness:
+
+- - signal safety
+  - threading considerations
+  - documentation
+
+- 2d Support/fix issues that arise out of the released project
+
+- 4d Make a pip installer
+
+### YDBPython
+
+Related improvements in YDBPython, similar to the ones implemented for lua-yottadb:
+
+- 13d: Improve efficiency of YDBPython -- similar to what was done for lua-yottadb (Cachearrays, etc).
+
+- 3d improve mechanism to invoke M from Python, again per lua-yottadb
+
+- 10d: Robustness: port signal safety mumps-python to YDBPython
+
+- Assess benefit of syntax upgrade YDBPython (per lua-yottadb syntax upgrade)
+
+- - 2d: assess (including ANET+Bhaskar) whether it's beneficial
+  - 8d: (optional) Implement
+  - 3d: Matching documentation
+
+- 5d: Write production-quality docs and feed them back into YottaDB
+
+- Weigh up making it work with multiple python interpreters (like Lua does) -- assess whether this will be of value, in view of there being only one Global Interpreter Lock in Python.
